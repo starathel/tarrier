@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"path"
 	"strconv"
 	"strings"
 	"time"
@@ -38,38 +39,41 @@ const (
 )
 
 var dayToBlock = map[DayType]string{
-    EMPTY_DAY: EMPTY_BLOCK,
-    MISSED_DAY: SHADED_BLOCK,
-    COMPLETED_DAY: FILLED_BLOCK,
+	EMPTY_DAY:     EMPTY_BLOCK,
+	MISSED_DAY:    SHADED_BLOCK,
+	COMPLETED_DAY: FILLED_BLOCK,
 }
 var dayToDayOfWeek = map[int]string{
-    0: "M",
-    1: "T",
-    2: "W",
-    3: "T",
-    4: "F",
-    5: "S",
-    6: "S",
+	0: "M",
+	1: "T",
+	2: "W",
+	3: "T",
+	4: "F",
+	5: "S",
+	6: "S",
 }
 
 var (
-	current_year  int
-	selected_year int
-	mark_today    bool
-	print_help    bool
+	currentYear     int
+	selectedYear    int
+	shouldMarkToday bool
+	printHelp       bool
+	dbPath          string
 )
 
 func init() {
-	current_year = time.Now().Year()
-	flag.IntVar(&selected_year, "year", current_year, "Select year to get progress of previous years. Ignored if used with -m")
-	flag.BoolVar(&mark_today, "m", false, "Mark today as completed")
-	flag.BoolVar(&print_help, "help", false, "Get help")
-	flag.BoolVar(&print_help, "h", false, "Get help")
+	currentYear = time.Now().Year()
+	flag.IntVar(&selectedYear, "year", currentYear, "Select year to get progress of previous years. Ignored if used with -m")
+	flag.BoolVar(&shouldMarkToday, "m", false, "Mark today as completed")
+	flag.BoolVar(&printHelp, "help", false, "Get help")
+	flag.BoolVar(&printHelp, "h", false, "Get help")
+
+	dbPath = path.Join(os.Getenv("HOME"), ".local/share/tarrier/db.sql")
 }
 
 func main() {
 	flag.Parse()
-	if print_help {
+	if printHelp {
 		fmt.Print(usage)
 		os.Exit(0)
 	}
@@ -79,18 +83,18 @@ func main() {
 		os.Exit(1)
 	}
 	selected_hobby := args[0]
-    if selected_year != current_year {
-        mark_today = false
-    }
+	if selectedYear != currentYear {
+		shouldMarkToday = false
+	}
 
 	var days []DayType
-	if isLeapYear(selected_year) {
+	if isLeapYear(selectedYear) {
 		days = make([]DayType, 366)
 	} else {
 		days = make([]DayType, 365)
 	}
 
-	if current_year == selected_year {
+	if currentYear == selectedYear {
 		for i := range time.Now().YearDay() {
 			days[i] = MISSED_DAY
 		}
@@ -103,18 +107,18 @@ func main() {
 	db := getDbConnection()
 	defer db.Close()
 
-	if mark_today {
+	if shouldMarkToday {
 		err := markToday(db, selected_hobby)
 		if err != nil {
 			log.Fatal(err)
 		}
 	}
 
-	for _, i := range getMarkedDays(db, selected_year, selected_hobby) {
+	for _, i := range getMarkedDays(db, selectedYear, selected_hobby) {
 		days[i-1] = COMPLETED_DAY
 	}
 
-	adjustedTable := make([]DayType, int(firstWeekdayOfYear(selected_year)), 400)
+	adjustedTable := make([]DayType, int(firstWeekdayOfYear(selectedYear)), 400)
 	adjustedTable = append(adjustedTable, days...)
 	printTable(adjustedTable)
 }
@@ -140,16 +144,16 @@ func firstWeekdayOfYear(year int) time.Weekday {
 }
 
 func getDbConnection() *sql.DB {
-	db, err := sql.Open("sqlite3", "./aboba.db")
+	db, err := sql.Open("sqlite3", dbPath)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-    err = fillDb(db)
-    if err != nil {
-        db.Close()
-        log.Fatal(err)
-    }
+	err = fillDb(db)
+	if err != nil {
+		db.Close()
+		log.Fatal(err)
+	}
 
 	return db
 }
