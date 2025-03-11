@@ -17,11 +17,11 @@ import (
 const usage = `
     Usage: tarrier [-m] [-l | -list] [-year <year>] <habit>
 
-    -m              Mark today as completed
+      -m              Mark today as completed
     
-    -l -list       Get all currently tracked habits
+      -l -list        Get all currently tracked habits
 
-    --year <year>   Select year to get progress of previous years. Ignored if used with -m
+      --year <year>   Select year to get progress of previous years. Ignored if used with -m
 
 `
 
@@ -56,13 +56,13 @@ var dayToDayOfWeek = map[int]string{
 }
 
 var (
-	currentYear     int
-	selectedYear    int
-	shouldMarkToday bool
-    shouldGetHabitsList bool
-	printHelp       bool
-    dbDirPath string
-	dbPath          string
+	currentYear         int
+	selectedYear        int
+	shouldMarkToday     bool
+	shouldGetHabitsList bool
+	printHelp           bool
+	dbDirPath           string
+	dbPath              string
 )
 
 func init() {
@@ -75,7 +75,7 @@ func init() {
 	flag.BoolVar(&shouldGetHabitsList, "list", false, "List currently tracked habits")
 
 	dbDirPath = path.Join(os.Getenv("HOME"), ".local/share/tarrier")
-    dbPath  = path.Join(dbDirPath, "db.db")
+	dbPath = path.Join(dbDirPath, "db.db")
 }
 
 func main() {
@@ -87,16 +87,16 @@ func main() {
 		fmt.Print(usage)
 		os.Exit(0)
 	}
-    if shouldGetHabitsList {
-        habits, err := getAllHabits(db)
-        if err != nil {
-            log.Fatal(err)
-        }
-        for _, habit := range habits {
-            fmt.Println(habit)
-        }
-        os.Exit(0)
-    }
+	if shouldGetHabitsList {
+		habits, err := getAllHabits(db)
+		if err != nil {
+			log.Fatal(err)
+		}
+		for _, habit := range habits {
+			fmt.Println(habit)
+		}
+		os.Exit(0)
+	}
 	args := flag.Args()
 	if len(args) != 1 {
 		fmt.Fprint(os.Stderr, usage)
@@ -161,7 +161,7 @@ func firstWeekdayOfYear(year int) time.Weekday {
 }
 
 func getDbConnection() *sql.DB {
-    os.MkdirAll(dbDirPath, 0750)
+	os.MkdirAll(dbDirPath, 0750)
 	db, err := sql.Open("sqlite3", dbPath)
 	if err != nil {
 		log.Fatal(err)
@@ -247,19 +247,19 @@ func markToday(db *sql.DB, habit string) error {
 }
 
 func getAllHabits(db *sql.DB) ([]string, error) {
-    habits := make([]string, 0)
-    rows, err := db.Query("SELECT name from habits")
-    if err != nil {
-        return nil, err
-    }
-    for rows.Next() {
-        var name string
-        if err := rows.Scan(&name); err != nil {
-            return nil, err
-        }
-        habits = append(habits, name)
-    }
-    return habits, nil
+	habits := make([]string, 0)
+	rows, err := db.Query("SELECT name from habits")
+	if err != nil {
+		return nil, err
+	}
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			return nil, err
+		}
+		habits = append(habits, name)
+	}
+	return habits, nil
 }
 
 func isLeapYear(year int) bool {
