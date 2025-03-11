@@ -33,18 +33,17 @@ func main() {
     db := getDbConnection()
     defer db.Close()
 
-    fmt.Println(getMarkedDays(db, time.Now().Year()))
-
-    for i := range days {
+    for i := range time.Now().YearDay() {
         days[i] = MISSED_DAY
     }
 
-    for _, i := range getMarkedDays(db, time.Now().Year()) {
+    for _, i := range getMarkedDays(db, time.Now().Year(), "programming") {
         days[i-1] = COMPLETED_DAY
     }
 
-    for i := time.Now().YearDay() - 1; i < len(days); i++ {
-        days[i] = MISSED_DAY
+    err := markToday(db, "programming")
+    if err != nil {
+        log.Fatal(err)
     }
 
     adjustedTable := make([]DayType, int(firstWeekdayOfYear(2025)), 400)
@@ -120,13 +119,17 @@ func getDbConnection() *sql.DB {
     }
 
     if shouldFillDb {
-        fillDb(db)
+        err = fillDb(db)
+        if err != nil {
+            db.Close()
+            log.Fatal(err)
+        }
     }
 
     return db
 }
 
-func fillDb(db *sql.DB) {
+func fillDb(db *sql.DB) error {
     var err error
     _, err = db.Exec(`
         CREATE TABLE IF NOT EXISTS hobbies (
@@ -135,7 +138,7 @@ func fillDb(db *sql.DB) {
         );
 `)
     if err != nil {
-        log.Fatal(err)
+        return err
     }
 
     _, err = db.Exec(`
@@ -148,17 +151,20 @@ func fillDb(db *sql.DB) {
         );
 `)
     if err != nil {
-        log.Fatal(err)
+        return err
     }
+    return nil
 }
 
-func getMarkedDays(db *sql.DB, year int) []int {
+func getMarkedDays(db *sql.DB, year int, hobby string) []int {
     markedDays := make([]int, 0, 366)
 
     rows, err := db.Query(`
         SELECT strftime('%j', mark) from tracks
+        JOIN hobbies on hobbies.id = tracks.hobby_id
         WHERE strftime('%Y', mark) = $1
-`, strconv.Itoa(year))
+        AND LOWER(hobbies.name) = $2
+`, strconv.Itoa(year), hobby)
     if err != nil {
         log.Fatal(err)
     }
@@ -170,4 +176,25 @@ func getMarkedDays(db *sql.DB, year int) []int {
         markedDays = append(markedDays, day)
     }
     return markedDays
+}
+
+func markToday(db *sql.DB, hobby string) error {
+    _, err := db.Exec(`
+        INSERT INTO hobbies (name) VALUES (LOWER($1))
+        ON CONFLICT DO NOTHING
+    `, hobby)
+    if err != nil {
+        return err
+    }
+    _, err = db.Exec(`
+        INSERT INTO tracks (hobby_id, mark) VALUES
+        (
+            (SELECT id FROM hobbies WHERE LOWER(name) = $1),
+            date()
+        )
+    `, hobby)
+    if err != nil {
+        return err
+    }
+    return nil
 }
