@@ -1,9 +1,16 @@
 package main
 
 import (
+	"database/sql"
+	"errors"
 	"fmt"
+	"log"
+	"os"
 	"strings"
-    "time"
+	"time"
+
+	_ "github.com/ncruces/go-sqlite3/driver"
+	_ "github.com/ncruces/go-sqlite3/embed"
 )
 
 type DayType int
@@ -23,6 +30,7 @@ const (
 
 func main() {
     days := make([]DayType, 366)
+    getDbConnection()
 
     for i := range days {
         days[i] = MISSED_DAY
@@ -93,4 +101,51 @@ func dayToDayOfWeek(day int) string {
 
 func firstWeekdayOfYear(year int) time.Weekday {
     return time.Date(year, time.January, 0, 0, 0, 0, 0, time.UTC).Weekday()    
+}
+
+func getDbConnection() *sql.DB {
+    var shouldFillDb bool
+    if _, err := os.Stat("./aboba.db"); errors.Is(err, os.ErrNotExist) {
+        shouldFillDb = true
+    } else if err != nil {
+        log.Fatal(err)
+    }
+
+    db, err := sql.Open("sqlite3", "./aboba.db")
+    if err != nil {
+        log.Fatal(err)
+    }
+    defer db.Close()
+
+    if shouldFillDb {
+        fillDb(db)
+    }
+
+    return db
+}
+
+func fillDb(db *sql.DB) {
+    var err error
+    _, err = db.Exec(`
+        CREATE TABLE IF NOT EXISTS hobbies (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name VARCHAR(64) NOT NULL UNIQUE
+        );
+`)
+    if err != nil {
+        log.Fatal(err)
+    }
+
+    _, err = db.Exec(`
+        CREATE TABLE IF NOT EXISTS tracks (
+            hobby_id INTEGER NOT NULL REFERENCES hobbies (id) ON DELETE CASCADE,
+            mark DATE NOT NULL,
+
+            CONSTRAINT unique_hobby_check PRIMARY KEY (hobby_id, mark)
+                ON CONFLICT IGNORE
+        );
+`)
+    if err != nil {
+        log.Fatal(err)
+    }
 }
