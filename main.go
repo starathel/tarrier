@@ -6,11 +6,11 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
-	_ "github.com/ncruces/go-sqlite3/driver"
-	_ "github.com/ncruces/go-sqlite3/embed"
+    _ "github.com/mattn/go-sqlite3"
 )
 
 type DayType int
@@ -30,14 +30,17 @@ const (
 
 func main() {
     days := make([]DayType, 366)
-    getDbConnection()
+    db := getDbConnection()
+    defer db.Close()
+
+    fmt.Println(getMarkedDays(db, time.Now().Year()))
 
     for i := range days {
         days[i] = MISSED_DAY
     }
 
-    for i := 35; i < 50; i++ {
-        days[i] = COMPLETED_DAY
+    for _, i := range getMarkedDays(db, time.Now().Year()) {
+        days[i-1] = COMPLETED_DAY
     }
 
     for i := time.Now().YearDay() - 1; i < len(days); i++ {
@@ -115,7 +118,6 @@ func getDbConnection() *sql.DB {
     if err != nil {
         log.Fatal(err)
     }
-    defer db.Close()
 
     if shouldFillDb {
         fillDb(db)
@@ -148,4 +150,24 @@ func fillDb(db *sql.DB) {
     if err != nil {
         log.Fatal(err)
     }
+}
+
+func getMarkedDays(db *sql.DB, year int) []int {
+    markedDays := make([]int, 0, 366)
+
+    rows, err := db.Query(`
+        SELECT strftime('%j', mark) from tracks
+        WHERE strftime('%Y', mark) = $1
+`, strconv.Itoa(year))
+    if err != nil {
+        log.Fatal(err)
+    }
+    for rows.Next() {
+        var day int
+        if err := rows.Scan(&day); err != nil {
+            log.Fatal(err)
+        }
+        markedDays = append(markedDays, day)
+    }
+    return markedDays
 }
