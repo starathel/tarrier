@@ -15,7 +15,7 @@ import (
 )
 
 const usage = `
-    Usage: tarrier [-m] [-year <year>] <hobby>
+    Usage: tarrier [-m] [-year <year>] <habit>
 
     -m              Mark today as completed
 
@@ -58,6 +58,7 @@ var (
 	selectedYear    int
 	shouldMarkToday bool
 	printHelp       bool
+    dbDirPath string
 	dbPath          string
 )
 
@@ -68,7 +69,8 @@ func init() {
 	flag.BoolVar(&printHelp, "help", false, "Get help")
 	flag.BoolVar(&printHelp, "h", false, "Get help")
 
-	dbPath = path.Join(os.Getenv("HOME"), ".local/share/tarrier/db.sql")
+	dbDirPath = path.Join(os.Getenv("HOME"), ".local/share/tarrier")
+    dbPath  = path.Join(dbDirPath, "db.db")
 }
 
 func main() {
@@ -82,7 +84,7 @@ func main() {
 		fmt.Fprint(os.Stderr, usage)
 		os.Exit(1)
 	}
-	selected_hobby := args[0]
+	selectedHabbit := args[0]
 	if selectedYear != currentYear {
 		shouldMarkToday = false
 	}
@@ -108,13 +110,13 @@ func main() {
 	defer db.Close()
 
 	if shouldMarkToday {
-		err := markToday(db, selected_hobby)
+		err := markToday(db, selectedHabbit)
 		if err != nil {
 			log.Fatal(err)
 		}
 	}
 
-	for _, i := range getMarkedDays(db, selectedYear, selected_hobby) {
+	for _, i := range getMarkedDays(db, selectedYear, selectedHabbit) {
 		days[i-1] = COMPLETED_DAY
 	}
 
@@ -144,6 +146,7 @@ func firstWeekdayOfYear(year int) time.Weekday {
 }
 
 func getDbConnection() *sql.DB {
+    os.MkdirAll(dbDirPath, 0750)
 	db, err := sql.Open("sqlite3", dbPath)
 	if err != nil {
 		log.Fatal(err)
@@ -161,7 +164,7 @@ func getDbConnection() *sql.DB {
 func fillDb(db *sql.DB) error {
 	var err error
 	_, err = db.Exec(`
-        CREATE TABLE IF NOT EXISTS hobbies (
+        CREATE TABLE IF NOT EXISTS habits (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             name VARCHAR(64) NOT NULL UNIQUE
         );
@@ -171,11 +174,11 @@ func fillDb(db *sql.DB) error {
 	}
 
 	_, err = db.Exec(`
-        CREATE TABLE IF NOT EXISTS tracks (
-            hobby_id INTEGER NOT NULL REFERENCES hobbies (id) ON DELETE CASCADE,
+        CREATE TABLE IF NOT EXISTS marks (
+            habit_id INTEGER NOT NULL REFERENCES habits (id) ON DELETE CASCADE,
             mark DATE NOT NULL,
 
-            CONSTRAINT unique_hobby_check PRIMARY KEY (hobby_id, mark)
+            CONSTRAINT unique_habit_mark PRIMARY KEY (habit_id, mark)
                 ON CONFLICT IGNORE
         );
 `)
@@ -185,15 +188,15 @@ func fillDb(db *sql.DB) error {
 	return nil
 }
 
-func getMarkedDays(db *sql.DB, year int, hobby string) []int {
+func getMarkedDays(db *sql.DB, year int, habit string) []int {
 	markedDays := make([]int, 0, 366)
 
 	rows, err := db.Query(`
-        SELECT strftime('%j', mark) from tracks
-        JOIN hobbies on hobbies.id = tracks.hobby_id
+        SELECT strftime('%j', mark) from marks
+        JOIN habits on habit.id = tracks.habit_id
         WHERE strftime('%Y', mark) = $1
-        AND LOWER(hobbies.name) = LOWER($2)
-`, strconv.Itoa(year), hobby)
+        AND LOWER(habits.name) = LOWER($2)
+`, strconv.Itoa(year), habit)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -207,21 +210,21 @@ func getMarkedDays(db *sql.DB, year int, hobby string) []int {
 	return markedDays
 }
 
-func markToday(db *sql.DB, hobby string) error {
+func markToday(db *sql.DB, habit string) error {
 	_, err := db.Exec(`
-        INSERT INTO hobbies (name) VALUES (LOWER($1))
+        INSERT INTO habits (name) VALUES (LOWER($1))
         ON CONFLICT DO NOTHING
-    `, hobby)
+    `, habit)
 	if err != nil {
 		return err
 	}
 	_, err = db.Exec(`
-        INSERT INTO tracks (hobby_id, mark) VALUES
+        INSERT INTO marks (habit_id, mark) VALUES
         (
-            (SELECT id FROM hobbies WHERE LOWER(name) = LOWER($1)),
+            (SELECT id FROM habits WHERE LOWER(name) = LOWER($1)),
             date()
         )
-    `, hobby)
+    `, habit)
 	if err != nil {
 		return err
 	}
