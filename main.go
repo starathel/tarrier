@@ -3,6 +3,7 @@ package main
 import (
 	"database/sql"
 	"errors"
+	"flag"
 	"fmt"
 	"log"
 	"os"
@@ -12,6 +13,15 @@ import (
 
 	_ "github.com/mattn/go-sqlite3"
 )
+
+const usage = `
+    Usage: tarrier [-m] [-year <year>] <hobby>
+
+    -m              Mark today as completed
+
+    --year <year>   Select year to get progress of previous years. Ignored if used with -m
+
+`
 
 type DayType int
 
@@ -28,25 +38,84 @@ const (
 	EMPTY_BLOCK  = "  "
 )
 
+var dayToBlock = map[DayType]string{
+    EMPTY_DAY: EMPTY_BLOCK,
+    MISSED_DAY: SHADED_BLOCK,
+    COMPLETED_DAY: FILLED_BLOCK,
+}
+var dayToDayOfWeek = map[int]string{
+    0: "M",
+    1: "T",
+    2: "W",
+    3: "T",
+    4: "F",
+    5: "S",
+    6: "S",
+}
+
+var (
+	current_year  int
+	selected_year int
+	mark_today    bool
+	print_help    bool
+)
+
+func init() {
+	current_year = time.Now().Year()
+	flag.IntVar(&selected_year, "year", current_year, "Select year to get progress of previous years. Ignored if used with -m")
+	flag.BoolVar(&mark_today, "m", false, "Mark today as completed")
+	flag.BoolVar(&print_help, "help", false, "Get help")
+	flag.BoolVar(&print_help, "h", false, "Get help")
+}
+
 func main() {
-	days := make([]DayType, 366)
+	flag.Parse()
+	if print_help {
+		fmt.Print(usage)
+		os.Exit(0)
+	}
+	args := flag.Args()
+	if len(args) != 1 {
+		fmt.Fprint(os.Stderr, usage)
+		os.Exit(1)
+	}
+	selected_hobby := args[0]
+    if selected_year != current_year {
+        mark_today = false
+    }
+
+	var days []DayType
+	if isLeapYear(selected_year) {
+		days = make([]DayType, 366)
+	} else {
+		days = make([]DayType, 365)
+	}
+
+	if current_year == selected_year {
+		for i := range time.Now().YearDay() {
+			days[i] = MISSED_DAY
+		}
+	} else {
+		for i := range days {
+			days[i] = MISSED_DAY
+		}
+	}
+
 	db := getDbConnection()
 	defer db.Close()
 
-	for i := range time.Now().YearDay() {
-		days[i] = MISSED_DAY
+	if mark_today {
+		err := markToday(db, selected_hobby)
+		if err != nil {
+			log.Fatal(err)
+		}
 	}
 
-	for _, i := range getMarkedDays(db, time.Now().Year(), "programming") {
+	for _, i := range getMarkedDays(db, selected_year, selected_hobby) {
 		days[i-1] = COMPLETED_DAY
 	}
 
-	err := markToday(db, "programming")
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	adjustedTable := make([]DayType, int(firstWeekdayOfYear(2025)), 400)
+	adjustedTable := make([]DayType, int(firstWeekdayOfYear(selected_year)), 400)
 	adjustedTable = append(adjustedTable, days...)
 	printTable(adjustedTable)
 }
@@ -55,49 +124,15 @@ func printTable(days []DayType) {
 	rows := make([]string, 7)
 	for i := range 7 {
 		daysInRow := make([]string, 0, 60)
-		daysInRow = append(daysInRow, dayToDayOfWeek(i)+" ")
+		daysInRow = append(daysInRow, dayToDayOfWeek[i]+" ")
 		daysInRow = append(daysInRow, " ")
 		for j := i; j < len(days); j += 7 {
-			daysInRow = append(daysInRow, dayTypeToBlock(days[j]))
+			daysInRow = append(daysInRow, dayToBlock[days[j]])
 		}
 		rows[i] = strings.Join(daysInRow, "")
 	}
 	for _, row := range rows {
 		fmt.Println(row)
-	}
-}
-
-func dayTypeToBlock(dayType DayType) string {
-	switch dayType {
-	case EMPTY_DAY:
-		return EMPTY_BLOCK
-	case MISSED_DAY:
-		return SHADED_BLOCK
-	case COMPLETED_DAY:
-		return FILLED_BLOCK
-	default:
-		panic("Should never ever happen")
-	}
-}
-
-func dayToDayOfWeek(day int) string {
-	switch day {
-	case 0:
-		return "M"
-	case 1:
-		return "T"
-	case 2:
-		return "W"
-	case 3:
-		return "T"
-	case 4:
-		return "F"
-	case 5:
-		return "S"
-	case 6:
-		return "S"
-	default:
-		panic("Should never see this")
 	}
 }
 
@@ -163,7 +198,7 @@ func getMarkedDays(db *sql.DB, year int, hobby string) []int {
         SELECT strftime('%j', mark) from tracks
         JOIN hobbies on hobbies.id = tracks.hobby_id
         WHERE strftime('%Y', mark) = $1
-        AND LOWER(hobbies.name) = $2
+        AND LOWER(hobbies.name) = LOWER($2)
 `, strconv.Itoa(year), hobby)
 	if err != nil {
 		log.Fatal(err)
@@ -189,7 +224,7 @@ func markToday(db *sql.DB, hobby string) error {
 	_, err = db.Exec(`
         INSERT INTO tracks (hobby_id, mark) VALUES
         (
-            (SELECT id FROM hobbies WHERE LOWER(name) = $1),
+            (SELECT id FROM hobbies WHERE LOWER(name) = LOWER($1)),
             date()
         )
     `, hobby)
@@ -197,4 +232,17 @@ func markToday(db *sql.DB, hobby string) error {
 		return err
 	}
 	return nil
+}
+
+func isLeapYear(year int) bool {
+	if year%4 == 0 {
+		if year%100 == 0 {
+			if year%400 == 0 {
+				return true
+			}
+			return false
+		}
+		return true
+	}
+	return false
 }
