@@ -2,7 +2,6 @@ package main
 
 import (
 	"database/sql"
-	"errors"
 	"flag"
 	"fmt"
 	"log"
@@ -141,25 +140,16 @@ func firstWeekdayOfYear(year int) time.Weekday {
 }
 
 func getDbConnection() *sql.DB {
-	var shouldFillDb bool
-	if _, err := os.Stat("./aboba.db"); errors.Is(err, os.ErrNotExist) {
-		shouldFillDb = true
-	} else if err != nil {
-		log.Fatal(err)
-	}
-
 	db, err := sql.Open("sqlite3", "./aboba.db")
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	if shouldFillDb {
-		err = fillDb(db)
-		if err != nil {
-			db.Close()
-			log.Fatal(err)
-		}
-	}
+    err = fillDb(db)
+    if err != nil {
+        db.Close()
+        log.Fatal(err)
+    }
 
 	return db
 }
