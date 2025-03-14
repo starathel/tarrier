@@ -74,6 +74,9 @@ func init() {
 	flag.BoolVar(&shouldGetHabitsList, "l", false, "List currently tracked habits")
 	flag.BoolVar(&shouldGetHabitsList, "list", false, "List currently tracked habits")
 
+	if dbDirPath == "HOME" {
+		dbDirPath = path.Join(os.Getenv("HOME"), ".local/share/tarrier")
+	}
 	dbPath = path.Join(dbDirPath, "db.db")
 }
 
@@ -138,13 +141,13 @@ func main() {
 	adjustedTable = append(adjustedTable, days...)
 	printTable(adjustedTable)
 
-    currStreak, maxStreak, err := getStreak(db, selectedHabbit)
-    if err != nil {
-        log.Fatal(err)
-    }
-    fmt.Println()
-    fmt.Printf("Current Streak: %d\n", currStreak)
-    fmt.Printf("Maximum Streak: %d\n", maxStreak)
+	currStreak, maxStreak, err := getStreak(db, selectedHabbit)
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Println()
+	fmt.Printf("Current Streak: %d\n", currStreak)
+	fmt.Printf("Maximum Streak: %d\n", maxStreak)
 }
 
 func printTable(days []DayType) {
@@ -284,39 +287,39 @@ func isLeapYear(year int) bool {
 
 // TODO: Can be done in SQL?
 func getStreak(db *sql.DB, habit string) (int, int, error) {
-    rows, err := db.Query(`
+	rows, err := db.Query(`
         SELECT mark FROM marks
         JOIN habits ON habits.id = marks.habit_id
         WHERE LOWER(habits.name) = LOWER($1)
         ORDER BY mark
-    `, habit) 
-    if err != nil {
-        return 0, 0, err
-    }
+    `, habit)
+	if err != nil {
+		return 0, 0, err
+	}
 
-    maxStreak := 0
-    currStreak := 0
-    prevDate  := time.Unix(0, 0)
-    var currDate time.Time
-    for rows.Next() {
-        if err := rows.Scan(&currDate); err != nil {
-            return 0, 0, err
-        }
+	maxStreak := 0
+	currStreak := 0
+	prevDate := time.Unix(0, 0)
+	var currDate time.Time
+	for rows.Next() {
+		if err := rows.Scan(&currDate); err != nil {
+			return 0, 0, err
+		}
 
-        if prevDate != time.Unix(0, 0) && currDate.Sub(prevDate).Hours() != 24 {
-            currStreak = 0
-        }
+		if prevDate != time.Unix(0, 0) && currDate.Sub(prevDate).Hours() != 24 {
+			currStreak = 0
+		}
 
-        currStreak++
-        if currStreak > maxStreak {
-            maxStreak = currStreak
-        }
-        prevDate = currDate
-    }
+		currStreak++
+		if currStreak > maxStreak {
+			maxStreak = currStreak
+		}
+		prevDate = currDate
+	}
 
-    if time.Now().Sub(currDate).Hours() > 48 {
-        currStreak = 0
-    }
+	if time.Now().Sub(currDate).Hours() > 48 {
+		currStreak = 0
+	}
 
-    return currStreak, maxStreak, nil
+	return currStreak, maxStreak, nil
 }
