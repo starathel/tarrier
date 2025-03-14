@@ -74,7 +74,6 @@ func init() {
 	flag.BoolVar(&shouldGetHabitsList, "l", false, "List currently tracked habits")
 	flag.BoolVar(&shouldGetHabitsList, "list", false, "List currently tracked habits")
 
-	dbDirPath = path.Join(os.Getenv("HOME"), ".local/share/tarrier")
 	dbPath = path.Join(dbDirPath, "db.db")
 }
 
